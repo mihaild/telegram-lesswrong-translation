@@ -1,0 +1,9 @@
+requests==2.32.3
+telegramify-markdown==0.3.2
+html-telegraph-poster==0.5.0
+lxml_html_clean==0.4.1
+python-telegram-bot==21.10
+google-generativeai==0.8.3
+telegraph==2.2.0
+python-dotenv==1.0.1
+beautifulsoup4==4.12.3

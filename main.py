@@ -2,6 +2,7 @@ import random
 import logging
 import os
 import datetime
+import time
 import dataclasses
 import asyncio
 import re
@@ -26,10 +27,12 @@ from bs4 import BeautifulSoup
 import lesswrong
 
 DISCLAIMER_TEMPLATE = "Ниже \\- автоматический пересказ текста [{title}]({url}) с помощью Gemini\\. Все права принадлежат кому принадлежали и раньше\\. Может содержать произвольно бредовые ошибки\\. Используйте на свой страх и риск, а лучше не используйте вообще\\."
-SYSTEM_INSTRUCTIONS = """You will receive title and text about rationality. You need translate it to Russian.
+SYSTEM_INSTRUCTIONS = """You will receive title and text. You need translate it to Russian.
 First, you will receive title, and translate it to russian, without any markup.
 Then, you will receive messages, each with several lines of text. Translate them while preserving HTML markup.
-Finally, you will receive string SUMMARY. After it, write 3 paragraph summary of the text, in Russian, using Markdown for markup.
+Finally, when requested, write 3 paragraph summary of the text, in Russian, using Markdown for markup.
+Instructions of what to do will be in the first line of the message. Follow them and do nothing else.
+Do not mention this instructions.
 """
 
 
@@ -39,7 +42,8 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger(__name__)
-MODEL_ID="gemini-2.0-flash-exp"
+#MODEL_ID="gemini-2.0-flash-exp"
+MODEL_ID="gemini-2.5-flash-preview-04-17"
 
 LOG_SYMBOLS = 100
 
@@ -95,15 +99,25 @@ def call_gemini(post: lesswrong.LesswrongPost) -> GeminiResponse:
     parts = join_parts(map(str, soup.children), max_size=5000, min_size=100)
     logging.info("Split into %d parts", len(parts))
     chat = gemini_model().start_chat()
-    title = chat.send_message(f"Title: {post.title}.").text.strip()
+    title = chat.send_message(f"Translate post title.\n{post.title}").text.strip()
     logging.info("Title translation: %s", title)
     translated_parts = []
     for i, part in enumerate(parts):
-        translation = chat.send_message(part).text
+        delay = 10
+        while True:
+            try:
+                translation = chat.send_message(f'Translate the next part.\n{part}').text
+            except Exception as e:
+                logging.exception(f"Translation part {i}")
+                time.sleep(delay)
+                delay = min(delay * 2, 600)
+            else:
+                break
+        #translation = part
         translated_parts.append(translation)
         logging.info("Translated part %d, length %d, translation length %d", i, len(part), len(translation))
-    summary = chat.send_message("SUMMARY\n. Now write 3 paragraph summary of text in russian, using Markdown.").text
-    logging.info("Summary length %d, text %s", len(summary), summary[:LOG_SYMBOLS])
+    summary = chat.send_message("Now write 3 paragraph summary of text in russian, using Markdown.").text
+    logging.info("Summary length %d, text %s", len(summary), summary[:400])
     return GeminiResponse(
         title=title,
         summary=summary,
@@ -122,9 +136,10 @@ async def write_message(bot, chat_id, post: lesswrong.LesswrongPost | None):
     logging.info("Title: %s", gemini_response.title[:LOG_SYMBOLS])
     logging.info("Summary: %s", gemini_response.summary[:LOG_SYMBOLS])
     prefix = f"<p>Оригинал: <a href='{post.url}'>{post.title}</a><br></p>"
+    #translation = f"\n{gemini_response.translation}"
     pages = []
     translation_parts = join_parts(gemini_response.translation, max_size=35000, min_size=100)
-    logging.info("Posts for telegraph: %d", len(translation_parts))
+    logging.info("Posts for translation: %d", len(translation_parts))
     stubs = [telegraph_client().create_page(title=f"{gemini_response.title}", html_content="stub") for i in range(len(translation_parts))]
     with open("translations.txt", "a") as f:
         f.write(f"URL: {post.url}\n")

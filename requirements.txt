@@ -7,3 +7,4 @@ google-generativeai==0.8.3
 telegraph==2.2.0
 python-dotenv==1.0.1
 beautifulsoup4==4.12.3
+feedparser==6.0.12

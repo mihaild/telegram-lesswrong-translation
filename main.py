@@ -43,7 +43,7 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 #MODEL_ID="gemini-2.0-flash-exp"
-MODEL_ID="gemini-2.5-flash-preview-04-17"
+MODEL_ID="gemini-2.5-flash"
 
 LOG_SYMBOLS = 100
 
@@ -183,7 +183,7 @@ def get_post() -> lesswrong.LesswrongPost | None:
         used_urls = []
     logging.info("Used urls: %d", len(used_urls))
     posts = lesswrong.get_last_posts()
-    new_posts = [post for post in posts if post.url not in used_urls]
+    new_posts = [post for post in posts if len(post.html) < 100000 and post.url not in used_urls]
     logging.info("Total posts: %d, unused urls: %d", len(posts), len(new_posts))
     if not new_posts:
         return None
